@@ -16,8 +16,10 @@ const int right_pwm_pin = 39;
 
 // PID Constants - Needs tuning
 
-float Kp = 0.05;
-float Kd = 0.02;
+// Start with Ziegler-Nichols
+
+float Kp = 0.8;
+float Kd = 0.1;
 
 int previous_error = 0; // state storage for the last loop iteration for D-Term
 const int BASE_SPEED = 70;
