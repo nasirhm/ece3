@@ -14,6 +14,7 @@ const int right_pwm_pin = 39;
 bool comingBack = false; 
 int donut = 0; // no sensors indicate turn around 
 const int YES = 8; 
+bool carIsMoving = true; 
 
 //bool print_directions = true;
 //const int LED_RF = 41;
@@ -71,15 +72,13 @@ int symmetric_8421(const uint16_t n[8]){
     return (-8*n[0] - 4*n[1] - 2*n[2] - n[3] + n[4] + 2*n[5] + 4*n[6] + 8*n[7]) / 4;  
 }
 
-int leftBiased(const uint16_t n[8]){// will keep the car on the left of the track 
-                                    // will return a zero error term when the car is actually to the left
-  return (-8*n[0] - 2*n[1] - 1*n[2] - n[3] + n[4] + 2*n[5] + 4*n[6] + 8*n[7]) / 4;
+int rightBiased(const uint16_t n[8]) {
+  return (-8*n[0] - 4*n[1] - 2*n[2] - 1*n[3] + 1*n[4] + 1*n[5] + 2*n[6] + 8*n[7]) / 4;
 }
 
-int rightBiased(const uint16_t n[8]){ // where the error would previously have been positive, due to sensors 3 through 8 
-  return (-8*n[0] - 4*n[1] - 2*n[2] - n[3] + n[4] + 1*n[5] + 2*n[6] + 8*n[7]) / 4; // it's close to 0 because the weights of sensors 3-8 are reduced
-}                                                                                 // i.e. the car prefers to stay to the right of the line
-
+int leftBiased(const uint16_t n[8]) {
+  return (-8*n[0] - 2*n[1] - 1*n[2] - 1*n[3] + 1*n[4] + 2*n[5] + 4*n[6] + 8*n[7]) / 4;
+}
 int getError() {
   int mins[8] = {667, 575, 553, 691, 553, 599, 621, 714};
   int maxs[8] = {1833, 1925, 1947, 1807, 1947, 1901, 1879, 1786};
@@ -96,11 +95,9 @@ int getError() {
   // Potential Normalization
    donut = 0;
 
-  // Split detection
-  int splitValues[8] = {}
   for (int i = 0; i < 8; i++){
     long current_reading = sensorValues[i]; // temporary long
-    if(current_reading >= 2450) donut++;
+    if(current_reading >= 2200) donut++;
     
     current_reading -= mins[i];
     if(current_reading < 0){ current_reading = 0; }
@@ -119,7 +116,7 @@ int getError() {
     sensorValues[i] = (uint16_t)current_reading;
   }
 
-  return weightScheme_8421(sensorValues);
+  return dynamicWeightScheme(sensorValues);
 }
 
 void turnAround(int delayMs){
@@ -183,20 +180,33 @@ if (rightSpd_adj < 0){
 
 }
 
+void stopCarPermanently(){
+  stopCar();
+  delay(100000);
+  }
+
 /////////////////////////////////////////////
-// Main loop
+// Main loop 
 ////////////////////////////////////////////
 
 void loop() {
-  donut = 0;
-  int current_error = getError(); // get the sensor readings and convert them into an error term
-  int derivative_term = current_error - previous_error; // will be executed every clock cycles, so / 1 would be fine
-  float correction = (Kp * current_error) + (Kd * derivative_term);
-  previous_error = current_error;
-  adjustWheelSpeed(correction); // adjust the wheel speed in response to the error term
-  if(donut == YES){
-    turnAround(1000);
-    comingBack = true; 
-  }
-  delay(1); // allows for better Kd tuning, can be removed for fast.
+  
+    donut = 0;
+    int current_error = getError(); // get the sensor readings and convert them into an error term
+    int derivative_term = current_error - previous_error; // will be executed every clock cycles, so / 1 would be fine
+    float correction = (Kp * current_error) + (Kd * derivative_term);
+    previous_error = current_error;
+    adjustWheelSpeed(correction); // adjust the wheel speed in response to the error term
+    
+    if(!comingBack && donut == YES){ // this loop will run once when we hit the end to turn around
+      turnAround(1000);
+      comingBack = true; 
+    }
+    delay(1); // allows for better Kd tuning, can be removed for fast.
+
+    if(comingBack && donut == YES){ // the second time the full black line is detected, we've finished the track
+      carIsMoving = false; 
+      stopCarPermanently();  
+           
+    } 
 }
